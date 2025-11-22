@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Healthcare Chatbot</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+    <h1>Smart Healthcare Chatbot</h1>
+    <div id="chat-window" class="chat-window"></div>
+    <div class="input-bar">
+        <input id="user-input" type="text" placeholder="Enter symptom (e.g. fever, headache)..."/>
+        <button id="send-btn">&#9658;</button>
+        <button id="stop-btn">&#9632; Stop</button>
+        <button id="reset-btn">&#8635;</button>
+    </div>
+</div>
+
+<script>
+function appendMsg(sender, text) {
+    let win = document.getElementById("chat-window");
+    win.innerHTML += `<div class="${sender}-msg"><span>${text}</span></div>`;
+    win.scrollTop = win.scrollHeight;
+}
+
+function clearInput() {
+    const input = document.getElementById("user-input");
+    input.value = "";
+    input.focus();
+}
+
+function sendUserInput(msg) {
+    appendMsg("user", msg);
+    fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "message=" + encodeURIComponent(msg)
+    })
+    .then(r => r.json())
+    .then(data => {
+        appendMsg("bot", data.response);
+        clearInput();
+    });
+}
+
+document.getElementById("send-btn").onclick = function() {
+    let input = document.getElementById("user-input");
+    let msg = input.value.trim();
+    if (!msg) return;
+    sendUserInput(msg);
+};
+
+document.getElementById("stop-btn").onclick = function() {
+    sendUserInput("done");
+};
+
+document.getElementById("reset-btn").onclick = function() {
+    fetch("/reset", {method:"POST"}).then(()=>location.reload());
+};
+
+document.getElementById("user-input").addEventListener("keypress",function(event){
+    if(event.key==="Enter") document.getElementById("send-btn").click();
+});
+</script>
+
+</body>
+</html>
