@@ -9,19 +9,35 @@
 <body>
 <div class="container">
     <h1>Smart Healthcare Chatbot</h1>
-    <div id="chat-window" class="chat-window"></div>
+    <p class="subtitle">Enter your symptoms to get health guidance</p>
+    
+    <div id="chat-window" class="chat-window">
+        <div class="bot-msg">
+            <span>Welcome! Please describe your symptoms one at a time (e.g., "fever", "headache"). Click <strong>Stop</strong> when you're done entering symptoms.</span>
+        </div>
+    </div>
+    
     <div class="input-bar">
-        <input id="user-input" type="text" placeholder="Enter symptom (e.g. fever, headache)..."/>
-        <button id="send-btn">&#9658;</button>
-        <button id="stop-btn">&#9632; Stop</button>
-        <button id="reset-btn">&#8635;</button>
+        <input id="user-input" type="text" placeholder="Enter symptom (e.g. fever, headache)..." autocomplete="off"/>
+        <button id="send-btn" title="Send message">&#9658;</button>
+        <button id="stop-btn" title="Finish entering symptoms">&#9632; Stop</button>
+        <button id="reset-btn" title="Start new consultation">&#8635;</button>
+    </div>
+    
+    <div class="disclaimer">
+        <small><strong>Disclaimer:</strong> This chatbot provides general health information only. Always consult a qualified healthcare provider.</small>
     </div>
 </div>
 
 <script>
+let isProcessing = false;
+
 function appendMsg(sender, text) {
-    let win = document.getElementById("chat-window");
-    win.innerHTML += `<div class="${sender}-msg"><span>${text}</span></div>`;
+    const win = document.getElementById("chat-window");
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `${sender}-msg`;
+    msgDiv.innerHTML = `<span>${text}</span>`;
+    win.appendChild(msgDiv);
     win.scrollTop = win.scrollHeight;
 }
 
@@ -31,39 +47,83 @@ function clearInput() {
     input.focus();
 }
 
+function setProcessing(processing) {
+    isProcessing = processing;
+    document.getElementById("send-btn").disabled = processing;
+    document.getElementById("stop-btn").disabled = processing;
+    document.getElementById("user-input").disabled = processing;
+    
+    if (processing) {
+        appendMsg("bot", "<em>Processing...</em>");
+    }
+}
+
 function sendUserInput(msg) {
-    appendMsg("user", msg);
+    if (isProcessing) return;
+    
+    appendMsg("user", escapeHtml(msg));
+    setProcessing(true);
+    
     fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "message=" + encodeURIComponent(msg)
     })
-    .then(r => r.json())
+    .then(response => response.json())
     .then(data => {
+        // Remove processing message
+        const win = document.getElementById("chat-window");
+        const processingMsgs = win.querySelectorAll('.bot-msg em');
+        processingMsgs.forEach(msg => {
+            if (msg.textContent === 'Processing...') {
+                msg.parentElement.parentElement.remove();
+            }
+        });
+        
         appendMsg("bot", data.response);
         clearInput();
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        appendMsg("bot", "Sorry, an error occurred. Please try again.");
+    })
+    .finally(() => {
+        setProcessing(false);
     });
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Event listeners
 document.getElementById("send-btn").onclick = function() {
-    let input = document.getElementById("user-input");
-    let msg = input.value.trim();
-    if (!msg) return;
+    const msg = document.getElementById("user-input").value.trim();
+    if (!msg || isProcessing) return;
     sendUserInput(msg);
 };
 
 document.getElementById("stop-btn").onclick = function() {
+    if (isProcessing) return;
     sendUserInput("done");
 };
 
 document.getElementById("reset-btn").onclick = function() {
-    fetch("/reset", {method:"POST"}).then(()=>location.reload());
+    if (isProcessing) return;
+    if (confirm("Start a new consultation?")) {
+        fetch("/reset", {method:"POST"}).then(() => location.reload());
+    }
 };
 
-document.getElementById("user-input").addEventListener("keypress",function(event){
-    if(event.key==="Enter") document.getElementById("send-btn").click();
+document.getElementById("user-input").addEventListener("keypress", function(event) {
+    if (event.key === "Enter" && !isProcessing) {
+        document.getElementById("send-btn").click();
+    }
 });
-</script>
 
+document.getElementById("user-input").focus();
+</script>
 </body>
 </html>
