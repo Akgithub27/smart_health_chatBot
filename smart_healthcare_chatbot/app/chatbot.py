@@ -1,4 +1,4 @@
-from app.nlp import match_user_symptoms
+                              from app.nlp import match_user_symptoms
 from app.diagnosis import diagnose
 from app.db import get_symptoms, get_followups_for_symptom, log_history
 
@@ -11,6 +11,7 @@ def start_session(session):
     session['followup_index'] = 0
 
 def collect_symptoms(session, user_text):
+    user_text_stripped = user_text.strip().lower()
     sym_ids, mapped = match_user_symptoms(user_text)
     entered_word = next(iter(mapped.keys())) if mapped else None
     if entered_word and entered_word not in session['symptom_words']:
@@ -59,5 +60,21 @@ def handle_user_message(session, user_text):
         if user_text_stripped in {'done', 'stop', 'finish'}:
             return handle_stop_command(session)
         else:
-            return collect_symptoms(session, user_text_stripped)
+            return collect_symptoms(session, user_text)
 
+    elif session['stage'] == 'followup':
+        if session['followup_index'] < len(session['followups']):
+            current_question = session['followups'][session['followup_index']]
+            session['followup_answers'][current_question] = user_text
+            session['followup_index'] += 1
+            if session['followup_index'] < len(session['followups']):
+                return session['followups'][session['followup_index']]
+        # All follow-ups done
+        condition, advice = diagnose(session['symptom_ids'])
+        answer = f"Diagnosis: {condition}<br>First Aid: {advice}"
+        log_history(", ".join(session['symptom_words']), answer)
+        session['stage'] = 'done'
+        return answer
+
+    else:  # done/reset stage
+        return "Session finished. Click reset to start a new chat."
